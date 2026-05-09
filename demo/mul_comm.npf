@@ -59,9 +59,9 @@ add_swap : @x:Nat. @y:Nat. @z:Nat. add(x, add(y, z)) == add(y, add(x, z)) = λ<>
 };
 
 // Doubling agrees with adding a natural to itself.
-proof : @x:Nat. mul2(x) == add(x, x) = λ<> λ{
+mul2_add_self : @x:Nat. mul2(x) == add(x, x) = λ<> λ{
   0: λu. {==};
-  1: λp. !proof(p); !add_succ_r(p, p); {==};
+  1: λp. !mul2_add_self(p); !add_succ_r(p, p); {==};
 };
 
 // Multiplying by zero on the right yields zero.

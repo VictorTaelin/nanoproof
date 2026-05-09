@@ -39,7 +39,7 @@ nanoproof demo/mul_comm.npf
 including:
 
 ```text
-proof : @x:Nat. mul2(x) == add(x, x)
+mul2_add_self : @x:Nat. mul2(x) == add(x, x)
 mul_comm : @x:Nat. @y:Nat. mul(x, y) == mul(y, x)
 ```
 
