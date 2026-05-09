@@ -490,15 +490,15 @@ wnf_use book bod arg = case wnf book arg of
   Red lft rgt -> wnf_use_red book bod lft rgt
   got -> App (Use bod) got
 
--- λ()f(())
--- ----------- app-use
+-- (λ()f)(())
+-- ------------- app-use
 -- f
 wnf_use_one :: Book -> Term -> Term
 wnf_use_one book bod = wnf book bod
 
--- λ()f(l ~> r)
--- ---------------- app-use-red
--- λ()f(l) ~> λ()f(r)
+-- (λ()f)(l ~> r)
+-- ------------------ app-use-red
+-- (λ()f)(l) ~> (λ()f)(r)
 wnf_use_red :: Book -> Term -> Term -> Term -> Term
 wnf_use_red book bod lft rgt = Red (App (Use bod) lft) (wnf book (App (Use bod) rgt))
 
@@ -509,21 +509,21 @@ wnf_mat book off on arg = case wnf book arg of
   Red lft rgt -> wnf_mat_red book off on lft rgt
   got -> App (Mat off on) got
 
--- λ{0:f;1:g}(0)
--- -------------- app-mat-0
+-- (λ{0:f;1:g})(0)
+-- ---------------- app-mat-0
 -- f
 wnf_mat_false :: Book -> Term -> Term
 wnf_mat_false book off = wnf book off
 
--- λ{0:f;1:g}(1)
--- -------------- app-mat-1
+-- (λ{0:f;1:g})(1)
+-- ---------------- app-mat-1
 -- g
 wnf_mat_true :: Book -> Term -> Term
 wnf_mat_true book on = wnf book on
 
--- λ{0:f;1:g}(l ~> r)
--- ------------------- app-mat-red
--- λ{0:f;1:g}(l) ~> λ{0:f;1:g}(r)
+-- (λ{0:f;1:g})(l ~> r)
+-- --------------------- app-mat-red
+-- (λ{0:f;1:g})(l) ~> (λ{0:f;1:g})(r)
 wnf_mat_red :: Book -> Term -> Term -> Term -> Term -> Term
 wnf_mat_red book off on lft rgt = Red (App (Mat off on) lft) (wnf book (App (Mat off on) rgt))
 
@@ -533,15 +533,15 @@ wnf_get book bod arg = case wnf book arg of
   Red lft rgt -> wnf_get_red book bod lft rgt
   got -> App (Get bod) got
 
--- λ<>f((a,b))
--- --------------- app-get
+-- (λ<>f)((a,b))
+-- ----------------- app-get
 -- f(a)(b)
 wnf_get_tup :: Book -> Term -> Term -> Term -> Term
 wnf_get_tup book bod lft rgt = wnf book (App (App bod lft) rgt)
 
--- λ<>f(l ~> r)
--- ---------------- app-get-red
--- λ<>f(l) ~> λ<>f(r)
+-- (λ<>f)(l ~> r)
+-- ------------------ app-get-red
+-- (λ<>f)(l) ~> (λ<>f)(r)
 wnf_get_red :: Book -> Term -> Term -> Term -> Term
 wnf_get_red book bod lft rgt = Red (App (Get bod) lft) (wnf book (App (Get bod) rgt))
 
@@ -569,7 +569,7 @@ wnf_red_lam book lft bod arg = Red (App lft arg) (wnf book (bod arg))
 
 -- (l ~> λ{})(v)
 -- ------------- app-red-efq
--- l(v) ~> λ{}(v)
+-- l(v) ~> (λ{})(v)
 wnf_red_efq :: Book -> Term -> Term -> Term
 wnf_red_efq book lft arg = case wnf book arg of
   Red a b -> Red (App lft a) (wnf book (App Efq b))
@@ -577,7 +577,7 @@ wnf_red_efq book lft arg = case wnf book arg of
 
 -- (l ~> λ()f)(v)
 -- ------------------ app-red-use
--- l(v) ~> λ()f(v)
+-- l(v) ~> (λ()f)(v)
 wnf_red_use :: Book -> Term -> Term -> Term -> Term
 wnf_red_use book lft bod arg = case wnf book arg of
   One -> Red (App lft One) (wnf book bod)
@@ -586,7 +586,7 @@ wnf_red_use book lft bod arg = case wnf book arg of
 
 -- (l ~> λ{0:f;1:g})(v)
 -- --------------------- app-red-mat
--- l(v) ~> λ{0:f;1:g}(v)
+-- l(v) ~> (λ{0:f;1:g})(v)
 wnf_red_mat :: Book -> Term -> Term -> Term -> Term -> Term
 wnf_red_mat book lft off on arg = case wnf book arg of
   Boo False -> Red (App lft (Boo False)) (wnf book off)
@@ -596,7 +596,7 @@ wnf_red_mat book lft off on arg = case wnf book arg of
 
 -- (l ~> λ<>f)(v)
 -- ------------------ app-red-get
--- l(v) ~> λ<>f(v)
+-- l(v) ~> (λ<>f)(v)
 wnf_red_get :: Book -> Term -> Term -> Term -> Term
 wnf_red_get book lft bod arg = case wnf book arg of
   Tup a b -> Red (App lft (Tup a b)) (wnf book (App (App bod a) b))
