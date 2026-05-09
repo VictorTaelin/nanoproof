@@ -4,66 +4,79 @@ Nat = μN. &𝔹. λ{
   1: N;
 };
 
+// Addition recurses on the first natural.
 add : @x:Nat. @y:Nat. Nat = λ<> λ{
   0: λu. λy. y;
   1: λp. λy. (1, add(p, y));
 };
 
+// Multiplication recurses on the first natural.
 mul : @x:Nat. @y:Nat. Nat = λ<> λ{
   0: λu. λy. (0, ());
   1: λp. λy. add(y, mul(p, y));
 };
 
+// Doubling by repeated successor.
 mul2 : @x:Nat. Nat = λ<> λ{
   0: λu. (0, ());
   1: λp. (1, (1, mul2(p)));
 };
 
+// Adding zero on the right leaves a natural unchanged.
 add_zero_r : @x:Nat. add(x, (0, ())) == x = λ<> λ{
   0: λu. {==};
   1: λp. !add_zero_r(p); {==};
 };
 
+// Adding a successor on the right pushes the successor outside.
 add_succ_r : @x:Nat. @y:Nat. add(x, (1, y)) == (1, add(x, y)) = λ<> λ{
   0: λu. λy. {==};
   1: λp. λy. !add_succ_r(p, y); {==};
 };
 
+// Addition is associative from left to right.
 add_assoc : @x:Nat. @y:Nat. @z:Nat. add(add(x, y), z) == add(x, add(y, z)) = λ<> λ{
   0: λu. λy. λz. {==};
   1: λp. λy. λz. !add_assoc(p, y, z); {==};
 };
 
+// Addition is associative from right to left.
 add_assoc_r : @x:Nat. @y:Nat. @z:Nat. add(x, add(y, z)) == add(add(x, y), z) = λ<> λ{
   0: λu. λy. λz. {==};
   1: λp. λy. λz. !add_assoc_r(p, y, z); {==};
 };
 
+// Addition is commutative.
 add_comm : @x:Nat. @y:Nat. add(x, y) == add(y, x) = λ<> λ{
   0: λu. λy. !add_zero_r(y); {==};
   1: λp. λy. !add_succ_r(y, p); !add_comm(p, y); {==};
 };
 
+// Adjacent additions can be swapped under a shared tail.
 add_swap : @x:Nat. @y:Nat. @z:Nat. add(x, add(y, z)) == add(y, add(x, z)) = λ<> λ{
   0: λu. λy. λz. {==};
   1: λp. λy. λz. !add_swap(p, y, z); !add_succ_r(y, add(p, z)); {==};
 };
 
+// Doubling agrees with adding a natural to itself.
 proof : @x:Nat. mul2(x) == add(x, x) = λ<> λ{
   0: λu. {==};
   1: λp. !proof(p); !add_succ_r(p, p); {==};
 };
 
+// Multiplying by zero on the right yields zero.
 mul_zero_r : @x:Nat. mul(x, (0, ())) == (0, ()) = λ<> λ{
   0: λu. {==};
   1: λp. !mul_zero_r(p); {==};
 };
 
+// Multiplying by a successor on the right unfolds to addition.
 mul_succ_r : @x:Nat. @y:Nat. mul(x, (1, y)) == add(x, mul(x, y)) = λ<> λ{
   0: λu. λy. {==};
   1: λp. λy. !mul_succ_r(p, y); !add_swap(y, p, mul(p, y)); {==};
 };
 
+// Multiplication is commutative.
 mul_comm : @x:Nat. @y:Nat. mul(x, y) == mul(y, x) = λ<> λ{
   0: λu. λy. !mul_zero_r(y); {==};
   1: λp. λy. !mul_succ_r(y, p); !mul_comm(p, y); {==};
