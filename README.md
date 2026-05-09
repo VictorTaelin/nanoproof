@@ -8,6 +8,10 @@ checks `.npf` files with:
 - guarded reductions
 - `{==}` and rewrite proofs
 
+Nanoproof has no termination checker. Recursive definitions and fixpoints are
+accepted as written, so users are responsible for keeping them terminating or
+productive.
+
 ## Install
 
 ```sh
