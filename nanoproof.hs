@@ -104,8 +104,9 @@ show_grouped lvl term = case term of
     parens = "(" ++ show_term lvl term ++ ")"
 
 show_red :: Term -> Term -> Term
-show_red _ (Red lft rgt) = show_red lft rgt
-show_red lft rgt = if is_stuck rgt then lft else rgt
+show_red (Ref nam) _           = Ref nam
+show_red lft       (Red _ rgt) = show_red lft rgt
+show_red lft       rgt         = if is_stuck rgt then lft else rgt
 
 is_stuck :: Term -> Bool
 is_stuck (App _ _) = True
@@ -122,44 +123,7 @@ show_args lvl [term] = show_term lvl term
 show_args lvl (x : xs) = show_term lvl x ++ "," ++ show_args lvl xs
 
 show_book :: Book -> Term -> String
-show_book book term = show_term 0 (short book (snf book term))
-
-short :: Book -> Term -> Term
-short book term = case alias_name book term of
-  Just nam -> Ref nam
-  Nothing -> case term of
-    Var nam -> Var nam
-    Ref nam -> Ref nam
-    Lam nam bod -> Lam nam (\x -> short book (bod x))
-    App fun arg -> App (short book fun) (short book arg)
-    Set -> Set
-    Emp -> Emp
-    Uni -> Uni
-    Bit -> Bit
-    Fix nam bod -> Fix nam (\x -> short book (bod x))
-    All dom cod -> All (short book dom) (short book cod)
-    Sig dom cod -> Sig (short book dom) (short book cod)
-    Eql lft rgt -> Eql (short book lft) (short book rgt)
-    One -> One
-    Boo val -> Boo val
-    Tup lft rgt -> Tup (short book lft) (short book rgt)
-    Efq -> Efq
-    Use bod -> Use (short book bod)
-    Mat off on -> Mat (short book off) (short book on)
-    Get bod -> Get (short book bod)
-    Rfl -> Rfl
-    Rwt eql bod -> Rwt (short book eql) (short book bod)
-    Red lft rgt -> Red (short book lft) (short book rgt)
-
-alias_name :: Book -> Term -> Maybe Name
-alias_name book term = go (Map.toList book) where
-  go [] = Nothing
-  go ((nam, (typ, bod)) : rest)
-    | alias_hit book term typ bod = Just nam
-    | otherwise = go rest
-
-alias_hit :: Book -> Term -> Term -> Term -> Bool
-alias_hit book term typ bod = equal (snf book typ) Set && equal (snf book bod) term
+show_book book term = show_term 0 (snf book term)
 
 -- Parsing
 -- -------
