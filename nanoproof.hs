@@ -86,7 +86,7 @@ show_term lvl term = case term of
   Use bod     -> "λ()" ++ show_term lvl bod
   Mat off on  -> "λ{0:" ++ show_term lvl off ++ ";1:" ++ show_term lvl on ++ ";}"
   Get bod     -> "λ<>" ++ show_term lvl bod
-  Rfl         -> "rfl"
+  Rfl         -> "{==}"
   Rwt eql bod -> "!" ++ show_term lvl eql ++ ";" ++ show_term lvl bod
   Red lft rgt -> show_term lvl (show_red lft rgt)
 
@@ -311,6 +311,7 @@ parse_atom_src src = case src of
     need "1"
     pure (\_ -> Boo True)
   '!' : _ -> parse_rwt
+  '{' : _ -> parse_rfl
   '(' : _ -> parse_parens
   []      -> fail_parse "unexpected end of input"
   _       -> parse_var
@@ -370,6 +371,11 @@ parse_rwt = do
   bod <- parse_term
   pure (\env -> Rwt (eql env) (bod env))
 
+parse_rfl :: Parser TermParser
+parse_rfl = do
+  need "{==}"
+  pure (\_ -> Rfl)
+
 parse_parens :: Parser TermParser
 parse_parens = do
   need "("
@@ -390,12 +396,8 @@ parse_parens = do
 
 parse_var :: Parser TermParser
 parse_var = do
-  is_rfl <- word "rfl"
-  if is_rfl
-    then pure (\_ -> Rfl)
-    else do
-      nam <- parse_name
-      pure (\env -> Map.findWithDefault (Ref nam) nam env)
+  nam <- parse_name
+  pure (\env -> Map.findWithDefault (Ref nam) nam env)
 
 parse_name :: Parser Name
 parse_name = do
@@ -445,25 +447,6 @@ need :: String -> Parser ()
 need tag = do
   got <- eat tag
   if got then pure () else fail_parse ("expected " ++ tag)
-
-word :: String -> Parser Bool
-word tag = do
-  src <- look
-  word_pick tag src (word_match tag src)
-
-word_pick :: String -> String -> Bool -> Parser Bool
-word_pick tag src True  = do
-  put (drop (length tag) src)
-  pure True
-word_pick _   _   False = pure False
-
-word_match :: String -> String -> Bool
-word_match tag src = take (length tag) src == tag && word_end (drop (length tag) src)
-
-word_end :: String -> Bool
-word_end src = case src of
-  c : _ -> not (is_name_char c)
-  []    -> True
 
 bound_ahead :: Parser Bool
 bound_ahead = do
@@ -889,7 +872,7 @@ check_eql book ctx term          lft rgt = check_infer book ctx term (Eql lft rg
 
 -- a ≡ b
 -- ---------- check-rfl
--- Γ ⊢ rfl ⇐ a == b
+-- Γ ⊢ {==} ⇐ a == b
 check_rfl :: Book -> Ctx -> Term -> Term -> Result ()
 check_rfl book ctx lft rgt = do
   if same book lft rgt
@@ -1076,88 +1059,6 @@ check_tests book ((nam, typ, bod) : rest) = case check book Map.empty bod typ of
   Left msg -> Left ("✗ " ++ nam ++ "\n" ++ msg)
   Right _  -> check_tests book rest
 
--- Enumeration
--- -----------
-
-type EnumCtx = [(Name, Term)]
-
-data EnumSplit = EnumSplit Int Int
-
-enum_limit :: Int
-enum_limit = 32
-
-enumerate :: Book -> Term -> [Term]
-enumerate book typ = enum_from book [] typ 1
-
-enum_from :: Book -> EnumCtx -> Term -> Int -> [Term]
-enum_from book ctx typ size = enum_at book ctx typ size ++ enum_from book ctx typ (size + 1)
-
-enum_at :: Book -> EnumCtx -> Term -> Int -> [Term]
-enum_at book ctx typ size = enum_vars book ctx typ size ++ enum_type book ctx (wnf book typ) size
-
-enum_type :: Book -> EnumCtx -> Term -> Int -> [Term]
-enum_type book ctx (Red _ rgt)    size = enum_type book ctx rgt size
-enum_type book ctx (Fix nam bod)  size = enum_type book ctx (bod (Fix nam bod)) size
-enum_type _    _   Emp            _    = []
-enum_type _    _   Uni            1    = [One]
-enum_type _    _   Uni            _    = []
-enum_type _    _   Bit            1    = [Boo False, Boo True]
-enum_type _    _   Bit            _    = []
-enum_type book ctx (Sig dom cod)  size = enum_sig book ctx dom cod size
-enum_type book ctx (All dom cod)  size = enum_all book ctx dom cod size
-enum_type _    _   _              _    = []
-
-enum_vars :: Book -> EnumCtx -> Term -> Int -> [Term]
-enum_vars book ctx typ 1 = enum_vars_go book ctx typ
-enum_vars _    _   _   _ = []
-
-enum_vars_go :: Book -> EnumCtx -> Term -> [Term]
-enum_vars_go _    []                      _   = []
-enum_vars_go book ((nam, typ) : rest) want = enum_var book nam typ want ++ enum_vars_go book rest want
-
-enum_var :: Book -> Name -> Term -> Term -> [Term]
-enum_var book nam typ want = if same book typ want then [Var nam] else []
-
-enum_sig :: Book -> EnumCtx -> Term -> Term -> Int -> [Term]
-enum_sig book ctx dom cod size = concatMap (enum_sig_split book ctx dom cod) (enum_splits (size - 1))
-
-enum_sig_split :: Book -> EnumCtx -> Term -> Term -> EnumSplit -> [Term]
-enum_sig_split book ctx dom cod split = concatMap (enum_sig_rgt book ctx cod split) lfts where
-  lfts = enum_at book ctx dom (enum_lft split)
-
-enum_sig_rgt :: Book -> EnumCtx -> Term -> EnumSplit -> Term -> [Term]
-enum_sig_rgt book ctx cod split lft = map (Tup lft) rgts where
-  rgts = enum_at book ctx (wnf book (App cod lft)) (enum_rgt split)
-
-enum_all :: Book -> EnumCtx -> Term -> Term -> Int -> [Term]
-enum_all book ctx dom cod size = map (enum_lam nam) bods where
-  nam  = enum_name (length ctx)
-  bods = enum_at book ((nam, dom) : ctx) (wnf book (App cod (Var nam))) (size - 1)
-
-enum_lam :: Name -> Term -> Term
-enum_lam nam bod = Lam nam (\_ -> bod)
-
-enum_splits :: Int -> [EnumSplit]
-enum_splits size = enum_splits_from size 1
-
-enum_splits_from :: Int -> Int -> [EnumSplit]
-enum_splits_from size lft = if lft > size - 1 then [] else EnumSplit lft (size - lft) : enum_splits_from size (lft + 1)
-
-enum_lft :: EnumSplit -> Int
-enum_lft (EnumSplit val _) = val
-
-enum_rgt :: EnumSplit -> Int
-enum_rgt (EnumSplit _ val) = val
-
-enum_name :: Int -> Name
-enum_name num = enum_names !! num
-
-enum_names :: [Name]
-enum_names = ["x", "y", "z", "p", "r", "f", "g", "h"] ++ map enum_extra_name [0 ..]
-
-enum_extra_name :: Int -> Name
-enum_extra_name num = "x" ++ show num
-
 -- CLI
 -- ---
 
@@ -1171,14 +1072,8 @@ cli [path] = do
   decls <- load_decls path
   ok <- run_tests decls
   unless ok exitFailure
-cli [path, "--enum", expr] = do
-  decls <- load_decls path
-  let book = build_book decls
-  case check_tests book (tests decls) of
-    Left msg -> putStrLn msg >> exitFailure
-    Right _  -> run_enum book expr
 cli _ = do
-  putStrLn "usage: nanoproof file.npf [--enum type]"
+  putStrLn "usage: nanoproof file.npf"
   exitFailure
 
 load_decls :: FilePath -> IO [Decl]
@@ -1187,8 +1082,3 @@ load_decls path = do
   case parse_defs src of
     Left msg    -> putStrLn msg >> exitFailure
     Right decls -> pure decls
-
-run_enum :: Book -> String -> IO ()
-run_enum book expr = case parse_expr expr of
-  Left msg  -> putStrLn msg >> exitFailure
-  Right typ -> mapM_ (putStrLn . show_book book) (take enum_limit (enumerate book typ))

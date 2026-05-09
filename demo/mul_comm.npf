@@ -20,51 +20,51 @@ mul2 : @x:Nat. Nat = λ<> λ{
 };
 
 add_zero_r : @x:Nat. add(x, (0, ())) == x = λ<> λ{
-  0: λu. rfl;
-  1: λp. !add_zero_r(p); rfl;
+  0: λu. {==};
+  1: λp. !add_zero_r(p); {==};
 };
 
 add_succ_r : @x:Nat. @y:Nat. add(x, (1, y)) == (1, add(x, y)) = λ<> λ{
-  0: λu. λy. rfl;
-  1: λp. λy. !add_succ_r(p, y); rfl;
+  0: λu. λy. {==};
+  1: λp. λy. !add_succ_r(p, y); {==};
 };
 
 add_assoc : @x:Nat. @y:Nat. @z:Nat. add(add(x, y), z) == add(x, add(y, z)) = λ<> λ{
-  0: λu. λy. λz. rfl;
-  1: λp. λy. λz. !add_assoc(p, y, z); rfl;
+  0: λu. λy. λz. {==};
+  1: λp. λy. λz. !add_assoc(p, y, z); {==};
 };
 
 add_assoc_r : @x:Nat. @y:Nat. @z:Nat. add(x, add(y, z)) == add(add(x, y), z) = λ<> λ{
-  0: λu. λy. λz. rfl;
-  1: λp. λy. λz. !add_assoc_r(p, y, z); rfl;
+  0: λu. λy. λz. {==};
+  1: λp. λy. λz. !add_assoc_r(p, y, z); {==};
 };
 
 add_comm : @x:Nat. @y:Nat. add(x, y) == add(y, x) = λ<> λ{
-  0: λu. λy. !add_zero_r(y); rfl;
-  1: λp. λy. !add_succ_r(y, p); !add_comm(p, y); rfl;
+  0: λu. λy. !add_zero_r(y); {==};
+  1: λp. λy. !add_succ_r(y, p); !add_comm(p, y); {==};
 };
 
 add_swap : @x:Nat. @y:Nat. @z:Nat. add(x, add(y, z)) == add(y, add(x, z)) = λ<> λ{
-  0: λu. λy. λz. rfl;
-  1: λp. λy. λz. !add_swap(p, y, z); !add_succ_r(y, add(p, z)); rfl;
+  0: λu. λy. λz. {==};
+  1: λp. λy. λz. !add_swap(p, y, z); !add_succ_r(y, add(p, z)); {==};
 };
 
 proof : @x:Nat. mul2(x) == add(x, x) = λ<> λ{
-  0: λu. rfl;
-  1: λp. !proof(p); !add_succ_r(p, p); rfl;
+  0: λu. {==};
+  1: λp. !proof(p); !add_succ_r(p, p); {==};
 };
 
 mul_zero_r : @x:Nat. mul(x, (0, ())) == (0, ()) = λ<> λ{
-  0: λu. rfl;
-  1: λp. !mul_zero_r(p); rfl;
+  0: λu. {==};
+  1: λp. !mul_zero_r(p); {==};
 };
 
 mul_succ_r : @x:Nat. @y:Nat. mul(x, (1, y)) == add(x, mul(x, y)) = λ<> λ{
-  0: λu. λy. rfl;
-  1: λp. λy. !mul_succ_r(p, y); !add_swap(y, p, mul(p, y)); rfl;
+  0: λu. λy. {==};
+  1: λp. λy. !mul_succ_r(p, y); !add_swap(y, p, mul(p, y)); {==};
 };
 
 mul_comm : @x:Nat. @y:Nat. mul(x, y) == mul(y, x) = λ<> λ{
-  0: λu. λy. !mul_zero_r(y); rfl;
-  1: λp. λy. !mul_succ_r(y, p); !mul_comm(p, y); rfl;
+  0: λu. λy. !mul_zero_r(y); {==};
+  1: λp. λy. !mul_succ_r(y, p); !mul_comm(p, y); {==};
 };

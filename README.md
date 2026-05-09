@@ -6,8 +6,7 @@ checks `.npf` files with:
 - empty, unit, bit, fixpoint, Pi, Sigma, and equality types
 - HOAS internally
 - guarded reductions
-- `rfl` and rewrite proofs
-- a small type-directed enumerator for parsed types
+- `{==}` and rewrite proofs
 
 ## Install
 
@@ -24,12 +23,6 @@ Check a file:
 
 ```sh
 nanoproof demo/mul_comm.npf
-```
-
-Enumerate inhabitants of a type expression using definitions from the file:
-
-```sh
-nanoproof demo/mul_comm.npf --enum Nat
 ```
 
 ## Demo
@@ -64,10 +57,10 @@ Core forms:
 ⊤              unit type
 𝔹              bit type
 μX.T           fixpoint
-@A.B           non-binding Pi
-@x:A.B         binding Pi sugar
-&A.B           non-binding Sigma
-&x:A.B         binding Sigma sugar
+@A.F           Pi over explicit family F
+@x:A.B         binding Pi sugar for @A.λx.B
+&A.F           Sigma over explicit family F
+&x:A.B         binding Sigma sugar for &A.λx.B
 a == b         equality type
 ()             unit value
 0 / 1          bit values
@@ -77,7 +70,7 @@ a == b         equality type
 λ()body        unit eliminator
 λ{0:a;1:b;}    bit eliminator
 λ<>body        pair eliminator
-rfl            reflexivity proof
+{==}           reflexivity proof
 !e; body       rewrite with equality proof e
 ```
 
@@ -90,11 +83,14 @@ mul(x,y)
 
 ## Notes
 
-Pi and Sigma codomains are ordinary terms used as families. A constant family is
-written directly; a dependent family is written as a lambda or eliminator.
+Plain Pi and Sigma codomains are ordinary terms used as families, so `@A.F`
+means `F` is applied to each `A` value. The binding forms build that family for
+you. A constant codomain can be written with an unused binder or an explicit
+lambda; `@A.C` is not a constant function type unless `C` is already a family.
 
 ```text
-@A.C
+@x:A.C
+@A.λ_.C
 @x:A.B
 @Bit.λ{0:A;1:B;}
 ```
