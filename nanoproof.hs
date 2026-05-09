@@ -31,6 +31,7 @@ data Term
   | Ref Name
   | Lam Name (Term -> Term)
   | App Term Term
+  | Set
   | Emp
   | Uni
   | Bit
@@ -71,6 +72,7 @@ show_term lvl term = case term of
   Ref nam     -> nam
   Lam _ bod   -> "λ" ++ x ++ "." ++ show_term (lvl + 1) (bod (Var x)) where x = fresh lvl
   App fun arg -> show_app lvl fun [arg]
+  Set         -> "Set"
   Emp         -> "⊥"
   Uni         -> "⊤"
   Bit         -> "𝔹"
@@ -121,6 +123,7 @@ short_term _    (Var nam)     = Var nam
 short_term _    (Ref nam)     = Ref nam
 short_term book (Lam nam bod) = Lam nam (\x -> short book (bod x))
 short_term book (App fun arg) = App (short book fun) (short book arg)
+short_term _    Set           = Set
 short_term _    Emp           = Emp
 short_term _    Uni           = Uni
 short_term _    Bit           = Bit
@@ -154,7 +157,7 @@ alias_pick _    _    nam _    True  = Just nam
 alias_pick book term _   rest False = alias_name_go book term rest
 
 alias_hit :: Book -> Term -> Term -> Term -> Bool
-alias_hit book term typ bod = equal (snf book typ) Uni && equal (snf book bod) term
+alias_hit book term typ bod = equal (snf book typ) Set && equal (snf book bod) term
 
 -- Parsing
 -- -------
@@ -397,7 +400,9 @@ parse_parens = do
 parse_var :: Parser TermParser
 parse_var = do
   nam <- parse_name
-  pure (\env -> Map.findWithDefault (Ref nam) nam env)
+  if nam == "Set"
+    then pure (\_ -> Set)
+    else pure (\env -> Map.findWithDefault (Ref nam) nam env)
 
 parse_name :: Parser Name
 parse_name = do
@@ -640,6 +645,7 @@ snf book term = case wnf book term of
   Red lft rgt -> Red (snf_args book lft) (snf book rgt)
   Lam nam bod -> Lam nam bod
   App fun arg -> App (snf_args book fun) (snf book arg)
+  Set         -> Set
   All dom cod -> All (snf book dom) (snf book cod)
   Sig dom cod -> Sig (snf book dom) (snf book cod)
   Eql lft rgt -> Eql (snf book lft) (snf book rgt)
@@ -673,6 +679,7 @@ equal_at lvl a b = case (a, b) of
   (Ref x, Ref y)         -> x == y
   (Lam _ f, Lam _ g)     -> equal_bind lvl f g
   (App af aa, App bf ba) -> equal_at lvl af bf && equal_at lvl aa ba
+  (Set, Set)             -> True
   (Emp, Emp)             -> True
   (Uni, Uni)             -> True
   (Bit, Bit)             -> True
@@ -711,6 +718,7 @@ rewrite_term _    _   _   (Var nam)     = Var nam
 rewrite_term _    _   _   (Ref nam)     = Ref nam
 rewrite_term book src dst (Lam nam bod) = Lam nam (\x -> rewrite_norm book src dst (bod x))
 rewrite_term book src dst (App fun arg) = App (rewrite_norm book src dst fun) (rewrite_norm book src dst arg)
+rewrite_term _    _   _   Set           = Set
 rewrite_term _    _   _   Emp           = Emp
 rewrite_term _    _   _   Uni           = Uni
 rewrite_term _    _   _   Bit           = Bit
@@ -739,6 +747,14 @@ infer :: Book -> Ctx -> Term -> Result Term
 infer _    ctx (Var nam)     = infer_var ctx nam
 infer book _   (Ref nam)     = infer_ref book nam
 infer book ctx (App fun arg) = infer_app book ctx fun arg
+infer _    _   Set           = infer_set
+infer _    _   Emp           = infer_type
+infer _    _   Uni           = infer_type
+infer _    _   Bit           = infer_type
+infer book ctx (Fix nam bod) = infer_fix_type book ctx nam bod
+infer book ctx (All dom cod) = infer_quant_type book ctx dom cod
+infer book ctx (Sig dom cod) = infer_quant_type book ctx dom cod
+infer book ctx (Eql lft rgt) = infer_eql_type book ctx lft rgt
 infer _    _   One           = infer_one
 infer _    _   (Boo val)     = infer_boo val
 infer book ctx (Red _ rgt)   = infer_red book ctx rgt
@@ -781,7 +797,7 @@ infer_app book ctx fun arg = do
 infer_app_type :: Book -> Ctx -> Term -> Term -> Term -> Result Term
 infer_app_type book ctx fun arg (Red _ rgt)   = infer_app_red book ctx fun arg rgt
 infer_app_type book ctx fun arg (Fix nam f)   = infer_app_fix book ctx fun arg nam f
-infer_app_type book ctx _   arg (All dom cod) = infer_app_all book ctx arg dom cod
+infer_app_type book ctx _   arg (All dom cod) = infer_app_pi book ctx arg dom cod
 infer_app_type _    _   fun _   _             = Left ("not a function " ++ show_term 0 fun)
 
 -- A ~> B    Γ ⊢ f(x) ⇒ B(x)
@@ -799,12 +815,58 @@ infer_app_fix book ctx fun arg nam f = do
   infer_app_type book ctx fun arg (f (Fix nam f))
 
 -- Γ ⊢ x ⇐ A
--- ---------------- infer-app-all
+-- ---------------- infer-app-pi
 -- Γ ⊢ f(x) ⇒ B(x)
-infer_app_all :: Book -> Ctx -> Term -> Term -> Term -> Result Term
-infer_app_all book ctx arg dom cod = do
+infer_app_pi :: Book -> Ctx -> Term -> Term -> Term -> Result Term
+infer_app_pi book ctx arg dom cod = do
   check book ctx arg dom
   pure (wnf book (App cod arg))
+
+-- ------------ infer-set
+-- Γ ⊢ Set ⇒ Set
+infer_set :: Result Term
+infer_set = do
+  pure Set
+
+-- ------------ infer-type
+-- Γ ⊢ T ⇒ Set
+infer_type :: Result Term
+infer_type = do
+  pure Set
+
+-- Γ,X:Set ⊢ F(X) ⇐ Set
+-- ---------------------- infer-fix-type
+-- Γ ⊢ μX.F ⇒ Set
+infer_fix_type :: Book -> Ctx -> Name -> (Term -> Term) -> Result Term
+infer_fix_type book ctx nam bod = do
+  check book (Map.insert nam Set ctx) (bod (Var nam)) Set
+  pure Set
+
+-- Γ ⊢ A ⇐ Set    Γ ⊢ F ⇐ @A.λ_.Set
+-- ----------------------------------- infer-quant-type
+-- Γ ⊢ @A.F ⇒ Set
+infer_quant_type :: Book -> Ctx -> Term -> Term -> Result Term
+infer_quant_type book ctx dom cod = do
+  check book ctx dom Set
+  check book ctx cod (All dom type_family)
+  pure Set
+
+type_family :: Term
+type_family = Lam "_" (\_ -> Set)
+
+-- Γ ⊢ a ⇒ A    Γ ⊢ b ⇒ B    A ≡ B
+-- -------------------------------- infer-eql-type
+-- Γ ⊢ a == b ⇒ Set
+infer_eql_type :: Book -> Ctx -> Term -> Term -> Result Term
+infer_eql_type book ctx lft rgt = case infer book ctx lft of
+  Right typ -> do
+    check book ctx rgt typ
+    pure Set
+  Left lmsg -> case infer book ctx rgt of
+    Right typ -> do
+      check book ctx lft typ
+      pure Set
+    Left rmsg -> Left (lmsg ++ "\n" ++ rmsg)
 
 -- ------------- infer-one
 -- Γ ⊢ () ⇒ ⊤
@@ -1031,13 +1093,13 @@ build_book decls = Map.fromList (map decl_entry decls)
 
 decl_entry :: Decl -> (Name, (Term, Term))
 decl_entry decl = case decl of
-  Alias nam bod    -> (nam, (Uni, bod))
+  Alias nam bod    -> (nam, (Set, bod))
   Defn nam typ bod -> (nam, (typ, bod))
 
 tests :: [Decl] -> [(Name, Term, Term)]
 tests []                        = []
-tests (Alias _ _ : rest)        = tests rest
-tests (Defn nam typ bod : rest) = (nam, typ, bod) : tests rest
+tests (Alias nam bod : rest)    = (nam, Set, bod) : tests rest
+tests (Defn nam typ bod : rest) = (nam ++ " type", Set, typ) : (nam, typ, bod) : tests rest
 
 run_test :: Book -> (Name, Term, Term) -> IO Bool
 run_test book (nam, typ, bod) = case check book Map.empty bod typ of

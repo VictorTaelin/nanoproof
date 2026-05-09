@@ -4,6 +4,7 @@ Nanoproof is a tiny dependently typed proof checker in one Haskell file. It
 checks `.npf` files with:
 
 - empty, unit, bit, fixpoint, Pi, Sigma, and equality types
+- `Set`, the type of types
 - HOAS internally
 - guarded reductions
 - `{==}` and rewrite proofs
@@ -11,6 +12,9 @@ checks `.npf` files with:
 Nanoproof has no termination checker. Recursive definitions and fixpoints are
 accepted as written, so users are responsible for keeping them terminating or
 productive.
+
+Nanoproof also uses a single universe, `Set : Set`, rather than a universe
+hierarchy.
 
 ## Install
 
@@ -51,12 +55,17 @@ Definitions:
 
 ```text
 Name = term;
-name : Type = term;
+name : type = term;
 ```
+
+Unannotated `Name = term;` declarations are type aliases, so `term` must check
+against `Set`. Annotated definitions first require `type : Set`, then check the
+body against that type.
 
 Core forms:
 
 ```text
+Set            type of types
 ⊥              empty type
 ⊤              unit type
 𝔹              bit type
@@ -88,9 +97,14 @@ mul(x,y)
 ## Notes
 
 Plain Pi and Sigma codomains are ordinary terms used as families, so `@A.F`
-means `F` is applied to each `A` value. The binding forms build that family for
-you. A constant codomain can be written with an unused binder or an explicit
-lambda; `@A.C` is not a constant function type unless `C` is already a family.
+requires `F : @A.λ_.Set` and applies `F` to each `A` value. The binding forms
+build that family for you. A constant codomain can be written with an unused
+binder or an explicit lambda; `@A.C` is not a constant function type unless `C`
+is already a family.
+
+Types themselves are not functions. A type alias such as `Nat : Set` cannot be
+applied as `Nat(x)`; only term-level functions and type families with Pi types
+can be applied.
 
 ```text
 @x:A.C
