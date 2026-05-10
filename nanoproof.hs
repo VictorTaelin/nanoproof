@@ -90,7 +90,7 @@ show_term lvl term = case term of
   Get bod -> "λ<>" ++ show_term lvl bod
   Rfl -> "{==}"
   Rwt eql bod -> "!" ++ show_term lvl eql ++ ";" ++ show_term lvl bod
-  Red lft rgt -> show_term lvl (show_red lft rgt)
+  Red lft _ -> show_term lvl lft
 
 show_grouped :: Int -> Term -> String
 show_grouped lvl term = case term of
@@ -102,15 +102,6 @@ show_grouped lvl term = case term of
   _ -> show_term lvl term
   where
     parens = "(" ++ show_term lvl term ++ ")"
-
-show_red :: Term -> Term -> Term
-show_red (Ref nam) _           = Ref nam
-show_red lft       (Red _ rgt) = show_red lft rgt
-show_red lft       rgt         = if is_stuck rgt then lft else rgt
-
-is_stuck :: Term -> Bool
-is_stuck (App _ _) = True
-is_stuck _ = False
 
 show_app :: Int -> Term -> [Term] -> String
 show_app lvl (App fun arg) args = show_app lvl fun (arg : args)
@@ -608,7 +599,7 @@ wnf_red_get book lft bod arg = case wnf book arg of
 
 snf :: Book -> Term -> Term
 snf book term = case wnf book term of
-  Red lft rgt -> Red (snf_args book lft) (snf book rgt)
+  Red lft rgt -> keep_red (snf_args book lft) (snf book rgt)
   Lam nam bod -> Lam nam bod
   App fun arg -> App (snf_args book fun) (snf book arg)
   Set -> Set
@@ -627,45 +618,48 @@ snf_args book (Red lft rgt) = Red (snf_args book lft) (snf_args book rgt)
 snf_args book (App fun arg) = App (snf_args book fun) (snf book arg)
 snf_args _ term = term
 
+keep_red :: Term -> Term -> Term
+keep_red lft rgt = case rgt of
+  Red _ next -> keep_red lft next
+  App _ _    -> Red lft rgt
+  _          -> rgt
+
 -- Equality
 -- --------
 
 same :: Book -> Term -> Term -> Bool
-same book a b = equal (snf book a) (snf book b)
+same book a b = same_at 0 (snf book a) (snf book b)
 
-equal :: Term -> Term -> Bool
-equal = equal_at 0
-
-equal_at :: Int -> Term -> Term -> Bool
-equal_at lvl a b = case (a, b) of
-  (Red al ar, Red bl br) -> equal_at lvl al bl || equal_at lvl ar br
-  (Red _ ar, _) -> equal_at lvl ar b
-  (_, Red _ br) -> equal_at lvl a br
+same_at :: Int -> Term -> Term -> Bool
+same_at lvl a b = case (a, b) of
+  (Red al ar, Red bl br) -> same_at lvl al bl || same_at lvl ar br
+  (Red _ ar, _) -> same_at lvl ar b
+  (_, Red _ br) -> same_at lvl a br
   (Var x, Var y) -> x == y
   (Ref x, Ref y) -> x == y
-  (Lam _ f, Lam _ g) -> equal_bind lvl f g
-  (App af aa, App bf ba) -> equal_at lvl af bf && equal_at lvl aa ba
+  (Lam _ f, Lam _ g) -> same_bind lvl f g
+  (App af aa, App bf ba) -> same_at lvl af bf && same_at lvl aa ba
   (Set, Set) -> True
   (Emp, Emp) -> True
   (Uni, Uni) -> True
   (Bit, Bit) -> True
-  (Fix _ f, Fix _ g) -> equal_bind lvl f g
-  (All ad ac, All bd bc) -> equal_at lvl ad bd && equal_at lvl ac bc
-  (Sig ad ac, Sig bd bc) -> equal_at lvl ad bd && equal_at lvl ac bc
-  (Eql al ar, Eql bl br) -> equal_at lvl al bl && equal_at lvl ar br
+  (Fix _ f, Fix _ g) -> same_bind lvl f g
+  (All ad ac, All bd bc) -> same_at lvl ad bd && same_at lvl ac bc
+  (Sig ad ac, Sig bd bc) -> same_at lvl ad bd && same_at lvl ac bc
+  (Eql al ar, Eql bl br) -> same_at lvl al bl && same_at lvl ar br
   (One, One) -> True
   (Boo x, Boo y) -> x == y
-  (Tup al ar, Tup bl br) -> equal_at lvl al bl && equal_at lvl ar br
+  (Tup al ar, Tup bl br) -> same_at lvl al bl && same_at lvl ar br
   (Efq, Efq) -> True
-  (Use x, Use y) -> equal_at lvl x y
-  (Mat ax ay, Mat bx by) -> equal_at lvl ax bx && equal_at lvl ay by
-  (Get x, Get y) -> equal_at lvl x y
+  (Use x, Use y) -> same_at lvl x y
+  (Mat ax ay, Mat bx by) -> same_at lvl ax bx && same_at lvl ay by
+  (Get x, Get y) -> same_at lvl x y
   (Rfl, Rfl) -> True
-  (Rwt ae ab, Rwt be bb) -> equal_at lvl ae be && equal_at lvl ab bb
+  (Rwt ae ab, Rwt be bb) -> same_at lvl ae be && same_at lvl ab bb
   _ -> False
 
-equal_bind :: Int -> (Term -> Term) -> (Term -> Term) -> Bool
-equal_bind lvl f g = equal_at (lvl + 1) (f (Var (fresh lvl))) (g (Var (fresh lvl)))
+same_bind :: Int -> (Term -> Term) -> (Term -> Term) -> Bool
+same_bind lvl f g = same_at (lvl + 1) (f (Var (fresh lvl))) (g (Var (fresh lvl)))
 
 -- Rewrite
 -- -------
@@ -677,7 +671,7 @@ rewrite_norm :: Book -> Term -> Term -> Term -> Term
 rewrite_norm book src dst term = rewrite_pick book src dst term (snf book term)
 
 rewrite_pick :: Book -> Term -> Term -> Term -> Term -> Term
-rewrite_pick book src dst term got = if equal src got then dst else rewrite_term book src dst term
+rewrite_pick book src dst term got = if same_at 0 src got then dst else rewrite_term book src dst term
 
 rewrite_term :: Book -> Term -> Term -> Term -> Term
 rewrite_term _ _ _ (Var nam) = Var nam
